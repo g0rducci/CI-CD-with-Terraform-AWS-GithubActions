@@ -1,5 +1,5 @@
 # Complete CI/CD with Terraform and AWS
-
+[![CI/CD with Terraform](https://github.com/g0rducci/CD-with-Terraform-AWS/actions/workflows/deploy.yml/badge.svg)](https://github.com/g0rducci/CD-with-Terraform-AWS/actions/workflows/deploy.yml)
 ## Technologies:
 - Terraform
 - Github Actions
