@@ -16,7 +16,7 @@ provider "aws" {
 resource "aws_instance" "servernode" {
   ami                    = "ami-052efd3df9dad4825"
   instance_type          = "t2.micro"
-  key_name               = aws_key_pair.deployer.key_name
+  key_name               = aws_key_pair.deploy.key_name
   vpc_security_group_ids = [aws_security_group.maingroup.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2-profile.name
   connection {
