@@ -44,7 +44,6 @@ jobs:
         run: |-
           echo "::set-output name=instance_public_ip::$(terraform output instance_public_ip)"
         working-directory: ./terraform  # Set the working directory to the Terraform directory
-
  deploy-app:
     runs-on: ubuntu-latest  # Run the job on an Ubuntu latest version
     needs: deploy-infra  # Depend on the completion of the 'deploy-infra' job
