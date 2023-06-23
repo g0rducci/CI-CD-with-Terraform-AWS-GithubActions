@@ -9,6 +9,11 @@
 - AWS S3
 - AWS ECR
 
+- Las SSH Publica y Privada hace el push Terraform de los envs secretos de github para colocarlos como key pairs en EC2
+- Las SSH se generan ssh-keygen
+- Bucket S3 se guarda el backend db de TFSTATE Terraform
+- ECR hace el push de la imagen docker al registro de imagenes de AWS
+- ECR ahce el fetch o pull de la imagen en la instancia
 
 ## Tasks:
 
