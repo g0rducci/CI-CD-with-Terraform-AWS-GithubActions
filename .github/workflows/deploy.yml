@@ -1,8 +1,5 @@
 name: CI/CD with Terraform
-on:
-  push:
-    branches:
-      - Complete-CI/CD-with-Terraform-AWS
+on: [push]
 
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
