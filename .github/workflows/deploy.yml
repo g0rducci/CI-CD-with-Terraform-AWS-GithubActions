@@ -1,30 +1,29 @@
-name: CI/CD with Terraform  # Name of the CI/CD workflow
-on: [push]  # Trigger the workflow on a push event
-
+name: CI/CD with Terraform
+on: [push]
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}  # Environment variable for AWS access key ID
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  # Environment variable for AWS secret access key
-  TF_STATE_BUCKET_NAME: ${{ secrets.AWS_TF_STATE_BUCKET_NAME }}  # Environment variable for the name of the S3 bucket to store Terraform state
-  PRIVATE_SSH_KEY: ${{ secrets.AWS_SSH_KEY_PRIVATE }}  # Environment variable for the private SSH key
-  PUBLIC_SSH_KEY: ${{ secrets.AWS_SSH_KEY_PUBLIC }}  # Environment variable for the public SSH key
-  AWS_REGION: us-east-1  # Environment variable for the AWS region
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_STATE_BUCKET_NAME: ${{ secrets.AWS_TF_STATE_BUCKET_NAME }}
+  PRIVATE_SSH_KEY: ${{ secrets.AWS_SSH_KEY_PRIVATE }}
+  PUBLIC_SSH_KEY: ${{ secrets.AWS_SSH_KEY_PUBLIC }}
+  AWS_REGION: us-east-1
 
 jobs:
   deploy-infra:
-    runs-on: ubuntu-latest  # Run the job on an Ubuntu latest version
+    runs-on: ubuntu-latest
     outputs:
-      SERVER_PUBLIC_IP: ${{ steps.set-ip.outputs.instance_public_ip}}  # Output the public IP address of the deployed infrastructure
+      SERVER_PUBLIC_IP: ${{ steps.set-ip.outputs.instance_public_ip}}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2  # Checkout the repository code
+        uses: actions/checkout@v2
       - name: setup Terraform
-        uses: hashicorp/setup-terraform@v1  # Set up Terraform
+        uses: hashicorp/setup-terraform@v1
         with:
           terraform_wrapper: false
       - name: Terraform init
         id: init
         run: terraform init -backend-config="bucket=$TF_STATE_BUCKET_NAME" -backend-config="region=us-east-1"
-        working-directory: ./terraform  # Set the working directory to the Terraform directory
+        working-directory: ./terraform
       - name: Terraform Plan
         id: plan
         run: |-
@@ -34,56 +33,54 @@ jobs:
           -var="private_key=$PRIVATE_SSH_KEY" \
           -var="key_name=deploy" \
           -out=PLAN
-        working-directory: ./terraform  # Set the working directory to the Terraform directory
+        working-directory: ./terraform
       - name: Terraform Apply
         id: apply
         run: terraform apply PLAN
-        working-directory: ./terraform  # Set the working directory to the Terraform directory
+        working-directory: ./terraform
       - name: Set output
         id: set-ip
         run: |-
           echo "::set-output name=instance_public_ip::$(terraform output instance_public_ip)"
-        working-directory: ./terraform  # Set the working directory to the Terraform directory
-
- deploy-app:
-    runs-on: ubuntu-latest  # Run the job on an Ubuntu latest version
-    needs: deploy-infra  # Depend on the completion of the 'deploy-infra' job
+        working-directory: ./terraform
+  deploy-app:
+    runs-on: ubuntu-latest
+    needs: deploy-infra
     steps:
       - name: Checkout
-        uses: actions/checkout@v3  # Checkout the repository code
+        uses: actions/checkout@v3
       - name: Set IP env variable
-        run: echo SERVER_PUBLIC_IP=${{ needs.deploy-infra.outputs.SERVER_PUBLIC_IP }} >> $GITHUB_ENV  # Set the SERVER_PUBLIC_IP environment variable using the output of the 'deploy-infra' job
+        run: echo SERVER_PUBLIC_IP=${{ needs.deploy-infra.outputs.SERVER_PUBLIC_IP }} >> $GITHUB_ENV
       - name: Login to AWS ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1  # Log in to AWS ECR
+        uses: aws-actions/amazon-ecr-login@v1
       - name: Build, push docker image
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}  # Set the REGISTRY environment variable using the output of the 'login-ecr' step
-          REPOSITORY: example-node-app  # Specify the repository name
-          IMAGE_TAG: ${{ github.sha }}  # Set the IMAGE_TAG to the commit SHA
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: example-node-app
+          IMAGE_TAG: ${{ github.sha }}
         run: |-
-          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .  # Build the Docker image
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG  # Push the Docker image to the ECR registry
-        working-directory: ./nodeapp  # Set the working directory to the nodeapp directory
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+        working-directory: ./nodeapp
       - name: Deploy docker image to EC2
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}  # Set the REGISTRY environment variable using the output of the 'login-ecr' step
-          REPOSITORY: example-node-app  # Specify the repository name
-          IMAGE_TAG: ${{ github.sha }}  # Set the IMAGE_TAG to the commit SHA
-          AWS_DEFAULT_REGION: us-east-1  # Set the AWS region
-        uses: appleboy/ssh-action@master  # Use the 'ssh-action' by appleboy
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: example-node-app
+          IMAGE_TAG: ${{ github.sha }}
+          AWS_DEFAULT_REGION: us-east-1
+        uses: appleboy/ssh-action@master
         with:
-          host: ${{ env.SERVER_PUBLIC_IP }}  # Set the host to the SERVER_PUBLIC_IP environment variable
-          username: ubuntu  # Specify the SSH username
-          key: ${{ env.PRIVATE_SSH_KEY }}  # Set the SSH key to the PRIVATE_SSH_KEY environment variable
-          envs: PRIVATE_SSH_KEY,REGISTRY,REPOSITORY,IMAGE_TAG,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_DEFAULT_REGION,AWS_REGION  # Pass the required environment variables
+          host: ${{ env.SERVER_PUBLIC_IP }}
+          username: ubuntu
+          key: ${{ env.PRIVATE_SSH_KEY }}
+          envs: PRIVATE_SSH_KEY,REGISTRY,REPOSITORY,IMAGE_TAG,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_DEFAULT_REGION,AWS_REGION
           script: |-
-            sudo apt update  # Update the system packages
-            sudo apt install docker.io -y  # Install Docker
-            sudo apt install awscli -y  # Install AWS CLI
-            sudo $(aws ecr get-login --no-include-email --region us-east-1);  # Log in to ECR registry
-            sudo docker stop myappcontainer || true  # Stop the running container if it exists
-            sudo docker rm myappcontainer || true  # Remove the container if it exists
-            sudo docker pull $REGISTRY/$REPOSITORY:$IMAGE_TAG  # Pull the Docker image from the ECR registry
-            sudo docker run -d --name myappcontainer -p 80:8080 $REGISTRY/$REPOSITORY:$IMAGE_TAG  # Run the Docker container
-
+            sudo apt update
+            sudo apt install docker.io -y
+            sudo apt install awscli -y
+            sudo $(aws ecr get-login --no-include-email --region us-east-1);
+            sudo docker stop myappcontainer || true
+            sudo docker rm myappcontainer || true
+            sudo docker pull $REGISTRY/$REPOSITORY:$IMAGE_TAG
+            sudo docker run -d --name myappcontainer -p 80:8080 $REGISTRY/$REPOSITORY:$IMAGE_TAG
